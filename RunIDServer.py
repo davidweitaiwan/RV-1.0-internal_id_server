@@ -11,6 +11,13 @@ from functools import partial
 import random
 from concurrent.futures import * 
 
+import argparse
+
+def Parser():
+    parser = argparse.ArgumentParser(description='ID Server')
+    parser.add_argument('-i', '--ip', required=False, type=str, metavar='N', default='192.168.1.42', help='Set ID server IP')
+    return parser.parse_args()
+
 
 logging.basicConfig(level=logging.DEBUG, format='[%(asctime)s] %(threadName)s: %(message)s')
 
@@ -102,7 +109,7 @@ def LoopReceiveAliveAignalAndResponse(sock):
             sock.settimeout(10)
             data1 = sock.recv(unpackerLength.size)
         except socket.error as msg:
-            print('Caught exception socket.error : ', msg)
+            print('[LoopReceiveAliveAignalAndResponse] Caught exception socket.error : ', msg)
             RemoveDeviceWithAliveSock(sock)
             break
         #print('received "%s"' % binascii.hexlify(data1))
@@ -112,7 +119,7 @@ def LoopReceiveAliveAignalAndResponse(sock):
             try:
                 data2 = sock.recv(unpacked_length)
             except socket.error as msg:
-                print('Caught exception socket.error : ', msg)
+                print('[LoopReceiveAliveAignalAndResponse] Caught exception socket.error : ', msg)
                 RemoveDeviceWithAliveSock(sock)
                 break
             #print('received "%s"' % binascii.hexlify(data2))
@@ -128,7 +135,7 @@ def LoopReceiveAliveAignalAndResponse(sock):
             try:
                 sock.send(packedContent)
             except socket.error as msg:
-                print('Caught exception socket.error : ', msg)
+                print('[LoopReceiveAliveAignalAndResponse] Caught exception socket.error : ', msg)
                 RemoveDeviceWithAliveSock(sock)
                 break
 
@@ -138,7 +145,7 @@ def LoopHandleControlCommand(sock):
         try:
             data1 = sock.recv(unpackerLength.size)
         except socket.error as msg:
-            print('Caught exception socket.error : ', msg)
+            print('[LoopHandleControlCommand] Caught exception socket.error : ', msg)
             break
         
         if(len(data1) >=4):
@@ -147,7 +154,7 @@ def LoopHandleControlCommand(sock):
             try:
                 data2 = sock.recv(unpacked_length)
             except socket.error as msg:
-                print('Caught exception socket.error : ', msg)
+                print('[LoopHandleControlCommand] Caught exception socket.error : ', msg)
                 break
             #print('received "%s"' % binascii.hexlify(data2))
             unpackerContent = struct.Struct(str(unpacked_length) + 'B')
@@ -250,7 +257,7 @@ def MakeSureGotLanIp():
     while not myIpAddr.startswith(serverIp):
         time.sleep(2)
         myIpAddr = GetIpAddress()
-        print('Waiting for IP, current IP is ', myIpAddr)
+        print('Waiting for IP %s, current IP is %s' %(serverIp, myIpAddr))
         
     #print('Set Server IP = ', myIpAddr)
     #os.system('netsh interface ip set dns name="Wi-Fi" static ' + gatewayIp)
@@ -261,7 +268,7 @@ def LoopGetConnectionFromADecice():
 
     # Create a TCP/IP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    #server_address = ('', portNumber)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_address = ('0.0.0.0', portNumber)
     sock.bind(server_address)
     sock.listen(24)
@@ -333,6 +340,7 @@ def LoopGetAliveSignal():
 
     # Create a TCP/IP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_address = ('0.0.0.0', portNumber)
     sock.bind(server_address)
     sock.listen(24)
@@ -407,6 +415,7 @@ def LoopReceiveControlClient():
 
     # Create a TCP/IP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_address = ('0.0.0.0', portNumber)
     sock.bind(server_address)
     sock.listen(1)
@@ -927,6 +936,9 @@ for id in range(21, 37):
 #------------------main funcs------------------
 #set up IP (skipped now)
 #SetServerIp(ipAddr=serverIp, gateway=gatewayIp)
+
+args = Parser()
+serverIp = args.ip
 
 MakeSureGotLanIp()
 
