@@ -264,7 +264,7 @@ def LoopGetConnectionFromADecice():
 
     # Create a TCP/IP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    #server_address = ('', portNumber)
     server_address = ('0.0.0.0', portNumber)
     sock.bind(server_address)
     sock.listen(24)
@@ -336,7 +336,6 @@ def LoopGetAliveSignal():
 
     # Create a TCP/IP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_address = ('0.0.0.0', portNumber)
     sock.bind(server_address)
     sock.listen(24)
@@ -525,7 +524,6 @@ def LoopReceiveControlClient():
 
     # Create a TCP/IP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_address = ('0.0.0.0', portNumber)
     sock.bind(server_address)
     sock.listen(1)
