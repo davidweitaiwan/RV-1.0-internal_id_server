@@ -10,13 +10,9 @@ import os
 from functools import partial
 import random
 from concurrent.futures import * 
-
-import argparse
-
-def Parser():
-    parser = argparse.ArgumentParser(description='ID Server')
-    parser.add_argument('-i', '--ip', required=False, type=str, metavar='N', default='192.168.1.42', help='Set ID server IP')
-    return parser.parse_args()
+from datetime import datetime
+import glob
+from datetime import datetime, timedelta
 
 
 logging.basicConfig(level=logging.DEBUG, format='[%(asctime)s] %(threadName)s: %(message)s')
@@ -257,7 +253,7 @@ def MakeSureGotLanIp():
     while not myIpAddr.startswith(serverIp):
         time.sleep(2)
         myIpAddr = GetIpAddress()
-        print('Waiting for IP %s, current IP is %s' %(serverIp, myIpAddr))
+        print('Waiting for IP, current IP is ', myIpAddr)
         
     #print('Set Server IP = ', myIpAddr)
     #os.system('netsh interface ip set dns name="Wi-Fi" static ' + gatewayIp)
@@ -391,6 +387,121 @@ def LoopGetAliveSignal():
             pass
             #connection.close()
 
+def LoopGetProfileFromHandBoard():
+    # 創建一個 socket 對象
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    # 定義監聽的端口
+    port = 10005
+
+    # 綁定端口
+    s.bind(('', port))
+
+    # 開始監聽，並設定最大連接請求數為 5
+    s.listen(5)
+
+    while True:
+        # 當有客戶端連接時，返回一個新的socket對象和地址
+        c, addr = s.accept()
+        print('Got connection from', addr)
+
+
+        while True:
+            data = c.recv(1024)
+            if not data:
+                break
+            print('Received data:', data)
+            timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')[:-3]  # 精確到毫秒
+            filename = f"/home/pi/{timestamp}.bin"
+            with open(filename, 'wb') as f:
+                f.write(data)
+
+        # 關閉與客戶端的連接
+        c.close()
+
+def LoopMergeFiles():
+    while True:
+
+        # 指定檔案路徑
+        path = '/home/pi/'  # 你的檔案路徑
+
+        # 獲取所有 .bin 檔案
+        files = glob.glob(os.path.join(path, '*.bin'))
+
+        # 將檔名解析為 datetime 對象並進行排序
+        file_times = sorted((datetime.strptime(os.path.splitext(os.path.basename(f))[0], '%Y%m%d%H%M%S%f'), f) for f in files)
+
+        if file_times:
+            # 用於暫存將要合併的檔案列表
+            files_to_merge = []
+            # 上一個檔案時間
+            prev_time = file_times[0][0]
+
+            for curr_time, file in file_times[1:]:
+                # 檢查時間差是否小於3秒
+                if (curr_time - prev_time) <= timedelta(seconds=3):
+                    # 如果還沒有添加過，則添加上一個檔案到列表中
+                    if not files_to_merge or files_to_merge[-1] != file_times[file_times.index((prev_time, file))-1][1]:
+                        files_to_merge.append(file_times[file_times.index((prev_time, file))-1][1])
+                    # 添加當前檔案到列表中
+                    files_to_merge.append(file)
+                else:
+                    # 如果有要合併的檔案，則合併並寫入新的檔案
+                    if files_to_merge:
+                        with open(f"{prev_time.strftime('%Y%m%d%H%M%S%f')[:-3]}_merged.bin", 'wb') as outfile:
+                            for f in files_to_merge:
+                                with open(f, 'rb') as infile:
+                                    outfile.write(infile.read())
+                        # 清空列表
+                        files_to_merge = []
+                # 更新上一個時間
+                prev_time = curr_time
+
+            # 檢查最後一個檔案
+            if files_to_merge:
+                with open(f"{prev_time.strftime('%Y%m%d%H%M%S%f')[:-3]}_merged.bin", 'wb') as outfile:
+                    for f in files_to_merge:
+                        with open(f, 'rb') as infile:
+                            outfile.write(infile.read())
+
+    time.sleep(1)
+
+def LoopGetProfileFromHandBoard0():
+    # 創建一個 socket 對象
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    # 定義監聽的端口
+    port = 10005
+
+    # 綁定端口
+    s.bind(('', port))
+
+    # 開始監聽，並設定最大連接請求數為 5
+    s.listen(5)
+
+    while True:
+        # 當有客戶端連接時，返回一個新的socket對象和地址
+        c, addr = s.accept()
+        print('Got connection from', addr)
+
+        # 獲取當前時間，並將其轉換為字串格式，作為檔名
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        filename = f"/home/pi/{timestamp}.bin"
+
+        # 繼續接收數據直到客戶端停止發送
+        with open(filename, 'wb') as f:
+            while True:
+                data = c.recv(1024)
+                if not data:
+                    break
+                # 將數據寫入檔案
+                f.write(data)
+
+        print(f'Data written to {filename}')
+
+        # 關閉與客戶端的連接
+        c.close()
+
 def HandleControlCommand(data):
     print('Handle Command from "Control-1": ', data)
 
@@ -407,7 +518,6 @@ def HandleControlCommand(data):
             print('----------------------------')
     else:
         print('Illegal Server0 command ', data)
-
 
 def LoopReceiveControlClient():
     portNumber = 10004
@@ -459,8 +569,6 @@ def LoopReceiveControlClient():
             print("Control-1 is OFFLINE")
             break
         
-
-
 def SetServerIp(ipAddr, gateway):
     #windows version
     '''
@@ -937,9 +1045,6 @@ for id in range(21, 37):
 #set up IP (skipped now)
 #SetServerIp(ipAddr=serverIp, gateway=gatewayIp)
 
-args = Parser()
-serverIp = args.ip
-
 MakeSureGotLanIp()
 
 #run routines to accept connections from devices
@@ -961,6 +1066,11 @@ handler4.start()
 handler6 = Thread(target=LoopReceiveControlClient)
 handler6.start()
 
+handler7 = Thread(target=LoopGetProfileFromHandBoard)
+handler7.start()
+
+#handler8 = Thread(target=LoopMergeFiles)
+#handler8.start()
 #------------------end main funcs---------------
     
 app.mainloop()
