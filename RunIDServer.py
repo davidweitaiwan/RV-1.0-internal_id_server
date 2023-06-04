@@ -13,6 +13,12 @@ from concurrent.futures import *
 from datetime import datetime
 import glob
 from datetime import datetime, timedelta
+import threading
+
+import shutil
+import regex
+import datetime
+import binascii
 
 
 logging.basicConfig(level=logging.DEBUG, format='[%(asctime)s] %(threadName)s: %(message)s')
@@ -386,6 +392,89 @@ def LoopGetAliveSignal():
             pass
             #connection.close()
 
+def merge_files_and_build_txt(directory='/home/pi/', ext='.bin'):
+    #===========MERGE============
+    # Search for all files
+    files = glob.glob(os.path.join(directory, '*' + ext))
+
+    # Create a regex pattern to check filenames
+    pattern = regex.compile(r'\d{17}' + regex.escape(ext) + r'$')
+
+    # Filter out the files with the correct format
+    filtered_files = [f for f in files if pattern.search(os.path.basename(f))]
+
+    # If filtered_files is empty, return directly
+    if not filtered_files:
+        return
+
+    # Parse filenames to time and sort
+    sorted_files = sorted(filtered_files, key=lambda x: int(os.path.basename(x).split('.')[0]))
+
+    # Initialize a list to store file groups
+    file_groups = []
+    current_group = [sorted_files[0]]
+
+    # Iterate through each file, if the time gap exceeds 2 seconds then create a new group
+    for i in range(1, len(sorted_files)):
+        current_file = sorted_files[i]
+        last_file = current_group[-1]
+        current_time = datetime.datetime.strptime(os.path.basename(current_file)[:-4], '%Y%m%d%H%M%S%f')
+        last_time = datetime.datetime.strptime(os.path.basename(last_file)[:-4], '%Y%m%d%H%M%S%f')
+
+        if (current_time - last_time).total_seconds() > 4:
+            file_groups.append(current_group)
+            current_group = [current_file]
+        else:
+            current_group.append(current_file)
+
+    # Append the last group
+    file_groups.append(current_group)
+
+    # Iterate through each group to merge files
+    for group in file_groups:
+        if len(group) > 1:
+            # The file with the maximum timestamp in the group
+            max_file = max(group, key=os.path.getctime)
+            # Temporary file for merging
+            temp_file_name = os.path.join(directory, 'temp' + ext)
+
+            # Open the temporary file and write data
+            with open(temp_file_name, 'wb') as outfile:
+                for fname in sorted(group, key=os.path.getctime):  # Ensure that the files are merged in time order
+                    with open(fname, 'rb') as infile:
+                        shutil.copyfileobj(infile, outfile)
+
+            # Rename the temporary file to the file with the maximum timestamp
+            new_file_name = os.path.join(directory, os.path.basename(max_file))
+            os.rename(temp_file_name, new_file_name)
+
+            # Delete the original files
+            for fname in group:
+                if fname != max_file:  # Do not delete the file with the maximum timestamp
+                    os.remove(fname)
+
+    #========BUILD TXT===========
+    pattern = regex.compile(r"\d{17}.bin$")
+
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if pattern.match(file):
+                bin_file_path = os.path.join(root, file)
+                with open(bin_file_path, "rb") as bin_file:
+                    bin_content = bin_file.read()
+                    hex_content = binascii.hexlify(bin_content).decode()
+                    hex_content = " ".join([hex_content[i: i+2] for i in range(0, len(hex_content), 2)])
+
+                    hex_content_lines = [hex_content[i: i+21*3-1] for i in range(0, len(hex_content), 21*3)]
+                    hex_content_with_newlines = "\n".join(hex_content_lines)
+
+                    txt_file_path = bin_file_path.replace(".bin", ".txt")
+                    with open(txt_file_path, "w") as txt_file:
+                        txt_file.write(hex_content_with_newlines)
+    
+    
+
+
 def LoopGetProfileFromHandBoard():
     # 創建一個 socket 對象
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -404,16 +493,22 @@ def LoopGetProfileFromHandBoard():
         c, addr = s.accept()
         print('Got connection from', addr)
 
-
+        timer = None
         while True:
             data = c.recv(1024)
+            if timer is not None:
+                timer.cancel()
             if not data:
                 break
-            print('Received data:', data)
-            timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')[:-3]  # 精確到毫秒
+
+            print(data[0])
+            timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')[:-3]  # 精確到毫秒
             filename = f"/home/pi/{timestamp}.bin"
             with open(filename, 'wb') as f:
                 f.write(data)
+
+            timer = threading.Timer(3.0, merge_files_and_build_txt, args=['/home/pi/', '.bin'])  # set timer for 2 seconds
+            timer.start()
 
         # 關閉與客戶端的連接
         c.close()
@@ -859,6 +954,7 @@ def BrakeAllCommand():
     
 
 #=================Main program================
+'''
 #GUI
 app = tk.Tk()
 app.title('獨立輪車通訊網路 ID Server')
@@ -1039,6 +1135,8 @@ for id in range(21, 37):
     uiUps.append(newUiUps)
 
 
+'''
+
 #------------------main funcs------------------
 #set up IP (skipped now)
 #SetServerIp(ipAddr=serverIp, gateway=gatewayIp)
@@ -1067,8 +1165,10 @@ handler6.start()
 handler7 = Thread(target=LoopGetProfileFromHandBoard)
 handler7.start()
 
-#handler8 = Thread(target=LoopMergeFiles)
+#handler8 = Thread(target=863)
 #handler8.start()
 #------------------end main funcs---------------
-    
+'''
 app.mainloop()
+'''    
+
