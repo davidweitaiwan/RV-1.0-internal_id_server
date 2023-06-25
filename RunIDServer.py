@@ -496,7 +496,7 @@ def handle_client(connection, client):
             with open(filename, 'wb') as f:
                 f.write(data)
 
-            timer = threading.Timer(5.0, merge_files_and_build_txt, args=['/home/pi/', '.bin'])  # set timer for 5 seconds
+            timer = threading.Timer(6.0, merge_files_and_build_txt, args=['/home/pi/', '.bin'])  # set timer for 6 seconds
             timer.start()
 
             #print('Received data from {}: {}'.format(client, data.decode()))
