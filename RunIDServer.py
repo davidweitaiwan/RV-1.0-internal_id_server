@@ -473,6 +473,72 @@ def merge_files_and_build_txt(directory='/home/pi/', ext='.bin'):
                         txt_file.write(hex_content_with_newlines)
     
     
+current_client = None
+current_connection = None
+
+def handle_client(connection, client):
+    global current_client, current_connection
+    timer = None
+    while True:
+        try:
+            # 接收數據
+            #print("Debug: Waiting for data from the client...")
+            data = connection.recv(1024)
+
+            if timer is not None:
+                timer.cancel()
+            if not data:
+                break
+
+            print(data[0])
+            timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')[:-3]  # 精確到毫秒
+            filename = f"/home/pi/{timestamp}.bin"
+            with open(filename, 'wb') as f:
+                f.write(data)
+
+            timer = threading.Timer(5.0, merge_files_and_build_txt, args=['/home/pi/', '.bin'])  # set timer for 5 seconds
+            timer.start()
+
+            #print('Received data from {}: {}'.format(client, data.decode()))
+        except ConnectionResetError:
+            print('Client {} disconnected unexpectedly'.format(client))
+            break
+
+    # 檢查並關閉舊連接
+    #print("Debug: Checking and closing old connections...")
+    if client == current_client:
+        connection.close()
+        current_client = None
+        current_connection = None
+        
+
+def LoopGetProfileFromHandBoard1():
+    global current_client, current_connection
+    port = 10005  # 更改此處的端口號
+
+    server_socket = socket.socket()  
+    server_socket.bind(('', port))  
+
+    print('Server started')
+    while True:
+        #print("Debug: Listening for incoming connections...")
+        server_socket.listen(2)
+        conn, address = server_socket.accept()
+
+        # 如果有舊的連接，則關閉
+        #print("Debug: Checking and closing old connections...")
+        if current_connection is not None:
+            current_connection.close()
+            print('Closed connection to {}'.format(current_client))
+
+        # 儲存新的連接資訊
+        current_connection = conn
+        current_client = address
+        print('Got connection from {}'.format(address))
+        
+        # 開始處理新的連接
+        #print("Debug: Starting a new thread to handle the client...")
+        threading.Thread(target=handle_client, args=(conn, address)).start()
 
 
 def LoopGetProfileFromHandBoard():
@@ -507,7 +573,7 @@ def LoopGetProfileFromHandBoard():
             with open(filename, 'wb') as f:
                 f.write(data)
 
-            timer = threading.Timer(3.0, merge_files_and_build_txt, args=['/home/pi/', '.bin'])  # set timer for 2 seconds
+            timer = threading.Timer(5.0, merge_files_and_build_txt, args=['/home/pi/', '.bin'])  # set timer for 5 seconds
             timer.start()
 
         # 關閉與客戶端的連接
@@ -779,8 +845,12 @@ def UpdateUi_(id, ip, info0, info1, info2, info3):
 
 def UpdateUi(id, ip, info0='', info1='', info2='', info3=''):
     #print(info0,' ', info1,' ',info2,' ', info3)
+    '''
     handler = Thread(target=UpdateUi_, args=(id, ip, info0, info1, info2, info3))
     handler.start()
+    '''
+    pass
+    
 
 def TurnLeftCommand():
     print('左轉')
@@ -1162,7 +1232,7 @@ handler4.start()
 handler6 = Thread(target=LoopReceiveControlClient)
 handler6.start()
 
-handler7 = Thread(target=LoopGetProfileFromHandBoard)
+handler7 = Thread(target=LoopGetProfileFromHandBoard1)
 handler7.start()
 
 #handler8 = Thread(target=863)
